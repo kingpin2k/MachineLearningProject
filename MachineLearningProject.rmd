@@ -1,0 +1,108 @@
+---
+title: "Machine Learning Project"
+output: html_document
+---
+
+# Summary
+
+In this project we will take a data related to the quality of weight lifting performed by a group of people and predict the quality of weight lifting of another set of data.
+
+
+# Data preparation
+
+We first will load the data into a few tables then trim out the noise
+
+```{r data_preparation}
+require(data.table)
+require(randomForest)
+set.seed(1337)
+
+# load libraries
+library(caret)
+
+# "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+training_url <- "pml-training.csv"
+# "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testing_url <- "pml-testing.csv"
+training <- read.csv(training_url, na.strings = c("NA", ""), strip.white=T)
+testing <- read.csv(testing_url, na.strings = c("NA", ""), strip.white=T)
+set_names <- names(training)
+# summary(training)
+# some worthless columns
+worthless_column_indexes <- grep("X|user_name|.*timestamp.*", set_names)
+training <- training[, -worthless_column_indexes]
+
+# remove na item columns
+na_items_index <- apply(training, 2, function(x) { sum(is.na(x)) })
+training <- training[, which(na_items_index == 0)]
+
+# remove columns that have low variability in order to train better
+near_zero_variability_column_indexes <- nearZeroVar(training)
+training <- training[, -near_zero_variability_column_indexes]
+
+```
+
+# Data partitioning
+
+We split the data into two parts, a training and testing part.  For this part I did an 80/20 split between training and testing
+
+```{r data_partitioning}
+
+train_idx <- createDataPartition(training$classe, p=0.8, list=F)
+t_training <- training[train_idx,]
+t_testing <- training[-train_idx,]
+
+```
+
+# Training 
+
+Now we'll create a random forrest training model for use on our partitioned test set.
+
+```{r training }
+
+
+# for performance, just run this the first time
+if (!exists("train_model")){
+  train_control <- trainControl(allowParallel=T, method="cv", number=4)
+  train_model <- train(classe ~ ., data=t_training, model="rf", trControl=train_control)
+}
+
+train_model
+
+train_model$finalModel
+
+round(max(train_model$results$Accuracy), 4) * 100
+
+
+```
+
+Our Training model has an accuracy of 99.73%.
+
+# Testing our model
+
+Let's test our training model against our partitioned test set
+
+```{r prediction_test}
+
+# test out our training model on the testing portion
+predict_model <- predict(train_model, newdata=t_testing)
+
+# let's check out the confusion matrix
+confusion_matrix <- confusionMatrix(t_testing$classe, predict_model)
+confusion_matrix$table
+
+# calculate our performance across the resample
+postResample(predict_model, t_testing$classe)
+
+```
+
+In our testing model we got an accuracy of 99.8% which was extremely accurate
+
+# Applying our model for the quiz
+
+```{r quiz_apply}
+predict_quiz <- predict(train_model, newdata=testing)
+
+predict_quiz
+
+```
